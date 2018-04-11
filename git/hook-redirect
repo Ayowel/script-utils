@@ -1,0 +1,34 @@
+#!/usr/bin/bash
+#
+# Runs all script that start with the same name in the
+# target folder.
+#
+# Target folder = hooks.scriptfolder, defaults to scripts/git
+# To run all scripts even if one fails, set
+# hooks.continueonerror to true
+#
+
+script_folder="$(git config hooks.scriptfolder)"
+if [ -z "${script_folder}" ]
+then
+  # String value set by the Makefile
+  script_folder="GIT_HOOKS_FOLDER"
+fi
+continueonerror="$(git config --bool hooks.continueonerror)"
+
+error=0
+for file in `find "${script_folder}" -name "${0//*\//}*"`
+do
+  if [[ "${file//*./}" == "sample" ]]; then
+	continue
+  fi
+  ${file} ${@}
+  error=$[error+$?]
+  if [ $error -ne 0 ] && [[ "$continueonerror" != "true" ]]
+  then
+    exit $error
+  fi
+done
+
+exit $error
+

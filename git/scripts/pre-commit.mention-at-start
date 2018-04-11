@@ -1,0 +1,52 @@
+#!/usr/bin/bash
+#
+# Used to enforce the use of a mention at the start
+# of all files with a set extension.
+#
+
+is_disabled=`git config --bool hooks.nomentioncheck`
+
+mention_dir="${0%\/*}"
+mention_prepend="mention_"
+
+mention_start="${mention_dir}/${mention_prepend}"
+errors=0
+
+if [[ "$is_disabled" == "true" ]] || \
+	[ `find "${mention_dir}" -name "${mention_prepend}*" | wc -l` -eq 0 ]; then
+	# end the script has been disabled by the user
+	# or if there is no mention file available
+	exit 0
+fi
+
+if ( git rev-parse --verify HEAD >/dev/null 2>&1 ); then
+	HEAD="HEAD"
+else
+	HEAD="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+fi
+filelist=( $(git diff --name-only --staged $HEAD) )
+for file in ${filelist[@]}; do
+	extension="${file//*./}"
+	[[ "$file" == "${file//./}" ]] && extension=""
+	mention_file="${mention_start}${extension}"
+	if [ -f "$mention_file" ]; then
+		mention="$(cat "${mention_file}")"
+		file_mention="$(git show :${file} | head -$(echo "${mention}" | wc -l))"
+		if [[ "$mention" != "$file_mention" ]]
+		then
+			echo "No mention in ${file}" >&2
+			# NOTE: named pipes are not supported in sh
+			diff -a --minimal --side-by-side \
+				<(echo "${file}:"; echo "${file_mention}") \
+				<(echo "${mention_file//*\//}:"; echo "${mention}")
+			errors=$[errors+1]
+		fi
+	fi
+done
+
+if [ $errors -ne 0 ]; then
+	echo "You have one or more files that do not hold the expeted mention." >&2
+	echo "If the diff visible above seems to show two identical lines, ensure that there is no extra spaces in your file" >&2
+	exit 1
+fi
+

@@ -1,0 +1,41 @@
+#!/usr/bin/bash
+#
+# Used to ensure that all commits contain the identifier
+# of the branch they are made on
+# Create a `branch-identifier` file in the script's folder
+# that contains the regex to match against
+#
+
+is_disabled=`git config --bool hooks.nobranchidincommits`
+
+script_dir="${0%\/*}"
+script_source="${script_dir}/branch-identifier"
+
+if [[ "$is_disabled" == "true" ]] || \
+	[ ! -f "${script_source}" ]; then
+	exit 0
+fi
+
+branch_name=`git rev-parse --abbrev-ref HEAD 2>/dev/null`
+if [ -z "${branch_name}" ]; then
+	# Detached HEAD state or first commit
+	exit
+fi
+
+regex="$(cat ${script_source})"
+match="$(grep -oE "${regex}" <(echo "$branch_name"))"
+
+if [ -z "match" ]; then
+	echo "Your current branch does not seem to match the regex provided (${regex})" >&2
+	echo "If it should, please update it and run git commit --amend" >&2
+	echo "note: your commit went through, this is only an information"
+	exit
+fi
+
+if head -1 "$1" | grep -E "^${match}( .*)?$" >/dev/null \
+		|| [[ "$(echo `head -1 "$1"`)" == "$(echo)" ]]; then
+	# Branch identifier already added or no commit message
+	exit
+fi
+
+sed -i -e "1s/^/${match} /" "$1"
